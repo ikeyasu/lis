@@ -4,6 +4,7 @@ import six.moves.cPickle as pickle
 import copy
 import os
 import numpy as np
+import sys
 from chainer import cuda
 
 from cnn_feature_extractor import CnnFeatureExtractor
@@ -22,6 +23,18 @@ class CnnDqnAgent(object):
     model_type = 'alexnet'
     image_feature_dim = 256 * 6 * 6
     image_feature_count = 1
+
+    def __init__(self):
+        if os.path.exists(self.cnn_feature_extractor):
+            print("loading... " + self.cnn_feature_extractor),
+            sys.stdout.flush()
+            self.feature_extractor = pickle.load(open(self.cnn_feature_extractor))
+            print("done")
+        else:
+            print("loading... " + self.model),
+            self.feature_extractor = CnnFeatureExtractor(self.use_gpu, self.model, self.model_type, self.image_feature_dim)
+            pickle.dump(self.feature_extractor, open(self.cnn_feature_extractor, 'w'))
+            print("pickle.dump finished")
 
     def _observation_to_featurevec(self, observation):
         # TODO clean
@@ -44,15 +57,6 @@ class CnnDqnAgent(object):
         self.use_gpu = options['use_gpu']
         self.depth_image_dim = options['depth_image_dim']
         self.q_net_input_dim = self.image_feature_dim * self.image_feature_count + self.depth_image_dim
-
-        if os.path.exists(self.cnn_feature_extractor):
-            print("loading... " + self.cnn_feature_extractor),
-            self.feature_extractor = pickle.load(open(self.cnn_feature_extractor))
-            print("done")
-        else:
-            self.feature_extractor = CnnFeatureExtractor(self.use_gpu, self.model, self.model_type, self.image_feature_dim)
-            pickle.dump(self.feature_extractor, open(self.cnn_feature_extractor, 'w'))
-            print("pickle.dump finished")
 
         self.time = 0
         self.epsilon = 1.0  # Initial exploratoin rate
