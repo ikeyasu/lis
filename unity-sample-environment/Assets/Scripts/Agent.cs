@@ -21,8 +21,26 @@ namespace MLPlayer {
 			}
 		}
 
+		private void UpdateDistances ()
+		{
+			Vector3 position = transform.position;
+			Vector3 direction = transform.forward;
+			for (int i = 0; i < 32; i++) {
+				RaycastHit hit;
+				direction = Quaternion.AngleAxis (11.25f, Vector3.up) * direction;
+				Ray ray = new Ray (position, direction);
+				if (Physics.Raycast (ray, out hit)) {
+					state.distances [i] = hit.distance;
+				} else {
+					state.distances [i] = float.MaxValue;
+				}
+				Debug.DrawRay (ray.origin, ray.direction * 10, Color.red, 0.3f);
+			}
+		}
+
 		public void UpdateState ()
 		{
+			UpdateDistances ();
 			state.image = new byte[rgbCameras.Count][];
 			for (int i=0; i<rgbCameras.Count; i++) {
 				Texture2D txture = rgbImages [i];
