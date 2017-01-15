@@ -4,6 +4,8 @@ import cherrypy
 import argparse
 from ws4py.server.cherrypyserver import WebSocketPlugin, WebSocketTool
 from ws4py.websocket import WebSocket
+
+from agent import LisAgent
 from cnn_dqn_agent import CnnDqnAgent
 import msgpack
 import io
@@ -36,7 +38,8 @@ class Root(object):
 
 
 class AgentServer(WebSocket):
-    agent = CnnDqnAgent()
+    agent = LisAgent()
+    agent.start()
     agent_initialized = False
     cycle_counter = 0
     thread_event = threading.Event()
@@ -46,6 +49,7 @@ class AgentServer(WebSocket):
     depth_image_count = 1
 
     def send_action(self, action):
+        #print(action)
         dat = msgpack.packb({"command": str(action)})
         self.send(dat, binary=True)
 
@@ -53,48 +57,34 @@ class AgentServer(WebSocket):
         payload = m.data
         dat = msgpack.unpackb(payload)
 
-        image = []
-        for i in xrange(self.depth_image_count):
-            image.append(Image.open(io.BytesIO(bytearray(dat['image'][i]))))
-        depth = []
-        for i in xrange(self.depth_image_count):
-            d = (Image.open(io.BytesIO(bytearray(dat['depth'][i]))))
-            depth.append(np.array(ImageOps.grayscale(d)).reshape(self.depth_image_dim))
-
-        observation = {"image": image, "depth": depth}
+        state = dat['distances']
         reward = dat['reward']
         end_episode = dat['endEpisode']
+        observation = (state, reward, end_episode)
 
         if not self.agent_initialized:
             self.agent_initialized = True
             print ("initializing agent...")
-            self.agent.agent_init(
-                use_gpu=args.gpu,
-                depth_image_dim=self.depth_image_dim * self.depth_image_count)
-
-            action = self.agent.agent_start(observation)
-            self.send_action(action)
-            with open(self.log_file, 'w') as the_file:
-                the_file.write('cycle, episode_reward_sum \n')
+            self.agent.state_queue.put(observation)
+            self.send_action(self.agent.retrieve_action())
+            with open(self.log_file, 'w') as f:
+                f.write('cycle, episode_reward_sum \n')
         else:
             self.thread_event.wait()
             self.cycle_counter += 1
             self.reward_sum += reward
 
+            self.agent.state_queue.put(observation)
+            action = self.agent.retrieve_action()
+            self.send_action(action)
             if end_episode:
-                self.agent.agent_end(reward)
-                action = self.agent.agent_start(observation)  # TODO
-                self.send_action(action)
-                with open(self.log_file, 'a') as the_file:
-                    the_file.write(str(self.cycle_counter) +
-                                   ',' + str(self.reward_sum) + '\n')
+                with open(self.log_file, 'a') as f:
+                    f.write(str(self.cycle_counter) +
+                            ',' + str(self.reward_sum) + '\n')
                 self.reward_sum = 0
-            else:
-                action, eps, q_now, obs_array = self.agent.agent_step(reward, observation)
-                self.send_action(action)
-                self.agent.agent_step_update(reward, action, eps, q_now, obs_array)
 
         self.thread_event.set()
+
 
 cherrypy.config.update({'server.socket_host': args.ip,
                         'server.socket_port': args.port})
@@ -104,4 +94,3 @@ cherrypy.config.update({'engine.autoreload.on': False})
 config = {'/ws': {'tools.websocket.on': True,
                   'tools.websocket.handler_cls': AgentServer}}
 cherrypy.quickstart(Root(), '/', config)
-
