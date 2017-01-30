@@ -4,12 +4,15 @@ using System.Collections;
 namespace MLPlayer {
 	public class RewardEvent : MonoBehaviour {
 		[SerializeField] float reward;
+		[SerializeField] bool deactiveWhenCollision;
 
 		void OnEvent(GameObject other) {
 			if (other.tag == Defs.PLAYER_TAG) {
 				other.GetComponent<Agent> ().AddReward (reward);
 				Debug.Log ("reward:" + reward.ToString ());
-				gameObject.SetActive (false);
+				if (deactiveWhenCollision) {
+					gameObject.SetActive (false);
+				}
 			}
 		}
 
@@ -20,5 +23,10 @@ namespace MLPlayer {
 		void OnCollisionEnter(Collision collision) {
 			OnEvent (collision.gameObject);
 		}
+
+		void OnCollisionStay(Collision collision) {
+			OnEvent (collision.gameObject);
+		}
+
 	}
 }
